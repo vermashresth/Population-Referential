@@ -1,17 +1,20 @@
 import pandas as pd
 import numpy as np
 import random
+
+import os
+
 from sklearn.datasets import make_classification, make_blobs
 from sklearn.preprocessing import MinMaxScaler
 
 def get_dummy_data(n_features, n_clusters, n_samples=10000):
-    csvname = "features-{}_clusters-{}".format(n_features, n_clusters)
-    try:
+    csvname = "features-{}_clusters-{}.csv".format(n_features, n_clusters)
+    if csvname in os.listdir('csvs'):
         df = pd.read_csv("csvs/"+csvname)
         X1 = df.iloc[:, 1:n_features+1].values
         Y1 = df['y'].values
         print("Successfully read data from csv")
-    except:
+    else:
         print("csv not found, creating new csv")
         X1, Y1 = make_blobs(n_samples=n_samples, n_features=n_features, centers=n_clusters)
         scaler = MinMaxScaler()

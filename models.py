@@ -10,7 +10,7 @@ class SpeakerModel(TFModelV2):
 
     def __init__(self, obs_space, action_space, num_outputs, model_config,
                  name):
-        super(CustomModel1, self).__init__(obs_space, action_space,
+        super(SpeakerModel, self).__init__(obs_space, action_space,
                                            num_outputs, model_config, name)
         self.inputs = tf.keras.layers.Input(
             shape=obs_space.shape, name="observations")
@@ -49,7 +49,7 @@ class ListenerModel(TFModelV2):
 
     def __init__(self, obs_space, action_space, num_outputs, model_config,
                  name):
-        super(CustomModel1, self).__init__(obs_space, action_space,
+        super(ListenerModel, self).__init__(obs_space, action_space,
                                            num_outputs, model_config, name)
         self.inputs = tf.keras.layers.Input(
             shape=obs_space.shape, name="observations")

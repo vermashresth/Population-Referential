@@ -23,6 +23,8 @@ class RFGame(MultiAgentEnv):
         self.l_obs_space = gym.spaces.Box(low=-0.01, high=1.01, shape=(n_features*n_samples+1,))
         self.l_act_space = gym.spaces.Discrete(n_samples)
 
+        self.X1, self.Y1 = get_dummy_data(self.n_features, self.n_clusters)
+
     def get_speaker_input(self):
         if self.sender_type=='aware':
             inp = list(self.states)
@@ -39,7 +41,7 @@ class RFGame(MultiAgentEnv):
 
     def reset(self):
         self.speaker_step = True
-        self.X1, self.Y1 = get_dummy_data(self.n_features, self.n_clusters)
+
         self.nos = np.random.choice(range(self.n_clusters), self.n_samples, replace=False).tolist()
         self.states = [self.X1[self.Y1==i][np.random.choice(self.X1[self.Y1==i].shape[0], 1)][0] for i in self.nos]
         self.target = 0
@@ -47,6 +49,7 @@ class RFGame(MultiAgentEnv):
         obs = {}
         for i in range(self.n_agents):
             if i%2==0:
+                id = str(i)
                 self.speaker_input = np.array(self.get_speaker_input())
                 obs[i] = self.speaker_input
         self.speaker_step = False
@@ -72,18 +75,20 @@ class RFGame(MultiAgentEnv):
             for i in range(self.n_agents):
                 s_id = i//2*2
                 l_id = s_id + 1
+                id = str(i)
                 rew = actions[l_id] == self.target
                 if i%2==0:
-                    obs[i], rew[i], done[i], info[i] = self.speaker_input, rew, True, {}
+                    obs[id], rew[id], done[id], info[id] = self.speaker_input, rew, True, {}
                 else:
-                    obs[i], rew[i], done[i], info[i] = self.listener_input, rew, True, {}
+                    obs[id], rew[id], done[id], info[id] = self.listener_input, rew, True, {}
             done["__all__"] = True
         else:
             for i in range(self.n_agents):
+                id = str(i)
                 if i%2==1:
                     self.heard_message = actions[(i//2)*2]
                     self.listener_input = np.array(self.get_listener_input(self.heard_message))
-                    obs[i], rew[i], done[i], info[i] = self.listener_input, 0, True, {}
+                    obs[id], rew[id], done[id], info[id] = self.listener_input, 0, True, {}
             self.speaker_step = True
             done["__all__"] = False
 
