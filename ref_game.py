@@ -1,7 +1,7 @@
 from ray.rllib.env.multi_agent_env import MultiAgentEnv
 import numpy as np
 import gym
-
+import random
 from get_dummies import get_dummy_data
 
 class RFGame(MultiAgentEnv):
@@ -30,14 +30,14 @@ class RFGame(MultiAgentEnv):
             inp = list(self.states)
         else:
             inp = list(self.states[0])
-        return inp
+        return np.array(inp).flatten()
 
     def get_listener_input(self, token):
         shuffled_index, shuffled_states = zip(*sorted(zip(range(self.n_samples), self.states), key=lambda _: random.random()))
         self.target = list(shuffled_index).index(0)
         inp = np.array(shuffled_states).flatten().tolist()
-        inp.append(token)
-        return inp
+        inp.append(float(token)/self.n_vocab)
+        return np.array(inp).flatten()
 
     def reset(self):
         self.speaker_step = True
@@ -51,45 +51,33 @@ class RFGame(MultiAgentEnv):
             if i%2==0:
                 id = str(i)
                 self.speaker_input = np.array(self.get_speaker_input())
-                obs[i] = self.speaker_input
+                obs[id] = self.speaker_input
         self.speaker_step = False
         return obs
-
-    # def get_observation_space(self, t=0):
-    #     if t==0:
-    #         return self.observation_space
-    #     else:
-    #         return self.observation_space_comm
-    #
-    # def get_action_space(self, t=0):
-    #     if t==0:
-    #         return self.action_space
-    #     else:
-    #         return self.action_space_comm
 
     def step(self, action_dict):
         obs, rew, done, info = {}, {}, {}, {}
 
-        actions = list(action_dict.values())
+        actions = action_dict
+
         if self.speaker_step:
             for i in range(self.n_agents):
                 s_id = i//2*2
                 l_id = s_id + 1
                 id = str(i)
-                rew = actions[l_id] == self.target
+                identify = int(actions[str(l_id)] == self.target)
                 if i%2==0:
-                    obs[id], rew[id], done[id], info[id] = self.speaker_input, rew, True, {}
+                    obs[id], rew[id], done[id], info[id] = self.speaker_input, identify, True, {}
                 else:
-                    obs[id], rew[id], done[id], info[id] = self.listener_input, rew, True, {}
+                    obs[id], rew[id], done[id], info[id] = self.listener_input, identify, True, {}
             done["__all__"] = True
         else:
             for i in range(self.n_agents):
                 id = str(i)
                 if i%2==1:
-                    self.heard_message = actions[(i//2)*2]
+                    self.heard_message = actions[str((i//2)*2)]
                     self.listener_input = np.array(self.get_listener_input(self.heard_message))
-                    obs[id], rew[id], done[id], info[id] = self.listener_input, 0, True, {}
+                    obs[id], rew[id], done[id], info[id] = self.listener_input, 0, False, {}
             self.speaker_step = True
             done["__all__"] = False
-
         return obs, rew, done, info
