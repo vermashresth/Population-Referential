@@ -7,7 +7,9 @@ from ray.tune import run_experiments
 from ray.tune.registry import register_env
 
 from ref_game import RFGame
-from models import MyModel
+# from models import MyModel
+
+from logging import on_episode_start, on_episode_end, on_episode_step, 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_name', type=str, default='baseline', help='Name experiment will be stored under')
@@ -49,7 +51,8 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
           num_agents, use_gpus_for_workers=False, use_gpu_for_driver=False,
           num_workers_per_device=1, return_agent_actions=False, local_rew=False, local_obs=False, share_comm_layer=True):
 
-    n_agents = 2
+    n_pairs = 2
+    n_agents = 2*n_pairs
     n_features = 3
     n_clusters = 5
     n_samples = 3
@@ -57,7 +60,7 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
     max_len = 2
 
     def env_creator(_):
-        return RFGame(n_agents, n_features, n_clusters, n_samples, n_vocab)
+        return RFGame(n_pairs, n_features, n_clusters, n_samples, n_vocab)
     RF = RFGame(n_agents, n_features, n_clusters, n_samples, n_vocab)
     env_name = env + "_env"
     register_env(env_name, env_creator)
@@ -70,7 +73,7 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
 
     # Each policy can have a different configuration (including custom model)
     def gen_policy(i):
-        if i%2==0:
+        if i<n_pairs:
             config = {
                 "model": {
                             "fcnet_hiddens": [256, 256, 256],
@@ -89,14 +92,14 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
 
     # Setup PPO with an ensemble of `num_policies` different policy graphs
     policy_graphs = {}
-    for i in range(n_agents):
+    for i in range(2*n_pairs):
         policy_graphs[str(i)] = gen_policy(i)
 
     def policy_mapping_fn(agent_id):
         return agent_id
 
     # register the custom model
-    ModelCatalog.register_custom_model("custom_model", MyModel)
+    # ModelCatalog.register_custom_model("custom_model", MyModel)
 
     agent_cls = get_agent_class(algorithm)
     config = agent_cls._default_config.copy()

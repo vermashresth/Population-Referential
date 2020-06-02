@@ -5,8 +5,9 @@ import random
 from get_dummies import get_dummy_data
 
 class RFGame(MultiAgentEnv):
-    def __init__(self, n_agents, n_features, n_clusters, n_samples, n_vocab, sender_type='aware'):
-        self.n_agents = n_agents
+    def __init__(self, n_pairs, n_features, n_clusters, n_samples, n_vocab, sender_type='aware'):
+        self.n_pairs = n_pairs
+        self.n_agents = 2*self.n_pairs
         self.n_features = n_features
         self.n_clusters = n_clusters
         self.n_samples = n_samples
@@ -25,59 +26,71 @@ class RFGame(MultiAgentEnv):
 
         self.X1, self.Y1 = get_dummy_data(self.n_features, self.n_clusters)
 
-    def get_speaker_input(self):
+    def get_speaker_input(self, i):
         if self.sender_type=='aware':
-            inp = list(self.states)
+            inp = list(self.states[i])
         else:
-            inp = list(self.states[0])
+            inp = list(self.states[i][0])
         return np.array(inp).flatten()
 
-    def get_listener_input(self, token):
-        shuffled_index, shuffled_states = zip(*sorted(zip(range(self.n_samples), self.states), key=lambda _: random.random()))
-        self.target = list(shuffled_index).index(0)
+    def get_listener_input(self, i, token):
+        shuffled_index, shuffled_states = zip(*sorted(zip(range(self.n_samples), self.states[i]), key=lambda _: random.random()))
+        self.target[i] = list(shuffled_index).index(0)
         inp = np.array(shuffled_states).flatten().tolist()
         inp.append(float(token)/self.n_vocab)
         return np.array(inp).flatten()
 
     def reset(self):
         self.speaker_step = True
-
-        self.nos = np.random.choice(range(self.n_clusters), self.n_samples, replace=False).tolist()
-        self.states = [self.X1[self.Y1==i][np.random.choice(self.X1[self.Y1==i].shape[0], 1)][0] for i in self.nos]
-        self.target = 0
+        self.mapping()
+        self.nos = [np.random.choice(range(self.n_clusters), self.n_samples, replace=False).tolist() for i in range(self.n_pairs)]
+        self.states = [[self.X1[self.Y1==i][np.random.choice(self.X1[self.Y1==i].shape[0], 1)][0] for i in self.nos[j]] for j in range(self.n_pairs)]
+        self.target = [0 for i in range(self.n_pairs)]
 
         obs = {}
+        self.speaker_input = {}
+        self.listener_input = {}
         for i in range(self.n_agents):
-            if i%2==0:
+            if i<self.n_pairs:
                 id = str(i)
-                self.speaker_input = np.array(self.get_speaker_input())
-                obs[id] = self.speaker_input
+                self.speaker_input[i] = np.array(self.get_speaker_input(i))
+                obs[id] = self.speaker_input[i]
         self.speaker_step = False
         return obs
 
+    def mapping(self):
+        sp = [i for i in range(self.n_pairs)]
+        lt = [i for i in range(self.n_pairs, self.n_agents)]
+        np.random.shuffle(lt)
+        z = list(zip(sp, lt))
+        self.sp2lt = {i[0]:i[1] for i in z}
+        self.lt2sp = {i[1]:i[0] for i in z}
+
+        self.sp2lt = {i[0]:i[0]+self.n_pairs for i in z}
+        self.lt2sp = {i[1]:i[1]-self.n_pairs for i in z}
+
+
     def step(self, action_dict):
         obs, rew, done, info = {}, {}, {}, {}
-
         actions = action_dict
 
         if self.speaker_step:
             for i in range(self.n_agents):
-                s_id = i//2*2
-                l_id = s_id + 1
                 id = str(i)
-                identify = int(actions[str(l_id)] == self.target)
-                if i%2==0:
-                    obs[id], rew[id], done[id], info[id] = self.speaker_input, identify, True, {}
+                if i<self.n_pairs:
+                    identify = int(actions[str(self.sp2lt[i])] == self.target[i])
+                    obs[id], rew[id], done[id], info[id] = self.speaker_input[i], identify, True, {}
                 else:
-                    obs[id], rew[id], done[id], info[id] = self.listener_input, identify, True, {}
+                    identify = int(actions[str(i)] == self.target[self.lt2sp[i]])
+                    obs[id], rew[id], done[id], info[id] = self.listener_input[self.lt2sp[i]], identify, True, {}
             done["__all__"] = True
         else:
             for i in range(self.n_agents):
                 id = str(i)
-                if i%2==1:
-                    self.heard_message = actions[str((i//2)*2)]
-                    self.listener_input = np.array(self.get_listener_input(self.heard_message))
-                    obs[id], rew[id], done[id], info[id] = self.listener_input, 0, False, {}
+                if i>=self.n_pairs:
+                    self.heard_message = actions[str(self.lt2sp[i])]
+                    self.listener_input[self.lt2sp[i]] = np.array(self.get_listener_input(self.lt2sp[i], self.heard_message))
+                    obs[id], rew[id], done[id], info[id] = self.listener_input[self.lt2sp[i]], 0, False, {}
             self.speaker_step = True
             done["__all__"] = False
         return obs, rew, done, info
