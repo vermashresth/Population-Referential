@@ -7,9 +7,9 @@ from ray.tune import run_experiments
 from ray.tune.registry import register_env
 
 from ref_game import RFGame
-# from models import MyModel
+from models import MyModel
 
-from logging import on_episode_start, on_episode_end, on_episode_step, 
+# from logging import on_episode_start, on_episode_end, on_episode_step,
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_name', type=str, default='baseline', help='Name experiment will be stored under')
@@ -76,16 +76,14 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
         if i<n_pairs:
             config = {
                 "model": {
-                            "fcnet_hiddens": [256, 256, 256],
-                            "vf_share_layers": False,
+                            "custom_model":"custom_model"
                         }
                     }
             return (None, s_obs_space, s_act_space, config)
         else:
             config = {
                 "model": {
-                            "fcnet_hiddens": [256, 256, 256],
-                            "vf_share_layers": False,
+                            "custom_model":"custom_model"
                         }
                     }
             return (None, l_obs_space, l_act_space, config)
@@ -99,7 +97,7 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
         return agent_id
 
     # register the custom model
-    # ModelCatalog.register_custom_model("custom_model", MyModel)
+    ModelCatalog.register_custom_model("custom_model", MyModel)
 
     agent_cls = get_agent_class(algorithm)
     config = agent_cls._default_config.copy()
@@ -154,7 +152,17 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
         config.update({"num_sgd_iter": 50,
                        "train_batch_size": 32,
                        "sgd_minibatch_size": 32,
-                       "vf_loss_coeff": 1e-4
+                       "vf_loss_coeff": 1e-4,
+                       "sample_batch_size":32
+
+                       config.update({"num_sgd_iter": 50,
+                       "train_batch_size": 32,
+                       "sgd_minibatch_size": 32,
+                       "vf_loss_coeff": 1e-4,
+                       "sample_batch_size":32,
+                       "use_gae": False,
+                       "batch_mode": "complete_episodes",
+                       "clip_param": 0.2,
                        })
     elif args.algorithm == "A3C":
         config.update({"sample_batch_size": 50,
@@ -173,7 +181,10 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
 
 if __name__=='__main__':
     args = parser.parse_args()
-    ray.init()
+    ray.init(
+    memory=2000 * 1024 * 1024,
+    object_store_memory=200 * 1024 * 1024,
+    driver_object_store_memory=100 * 1024 * 1024)
     alg_run, env_name, config = setup(args.env, ref_pair_params, args.algorithm,
                                       args.train_batch_size,
                                       args.num_cpus,
