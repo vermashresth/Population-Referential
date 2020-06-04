@@ -22,7 +22,7 @@ from ray.rllib.agents.trainer_template import build_trainer
 
 # from algorithms.common_funcs import setup_moa_loss, causal_fetches, setup_causal_mixins, get_causal_mixins, \
 #     causal_postprocess_trajectory, CAUSAL_CONFIG
-
+import random
 
 NUM_AGENTS = 4
 
@@ -30,17 +30,24 @@ tf = try_import_tf()
 
 POLICY_SCOPE = "func"
 
-CAUSAL_CONFIG.update(DEFAULT_CONFIG)
+# CAUSAL_CONFIG.update(DEFAULT_CONFIG)
 
-
+def my_vf_preds_and_logits_fetches(policy):
+    """Adds value function and logits outputs to experience train_batches."""
+    return {
+        'VF_PREDS_0': policy.model.value_function(0),
+        'VF_PREDS_1': policy.model.value_function(1),
+        'VF_PREDS_2': policy.model.value_function(2),
+        BEHAVIOUR_LOGITS: policy.model.last_output(),
+    }
 def loss_with_moa(policy, model, dist_class, train_batch):
     # you need to override this bit to pull out the right bits from train_batch
     logits, state = model.from_batch(train_batch)
     action_dist = dist_class(logits, model)
 
-    if policy.model.causal:
-        moa_loss = setup_moa_loss(logits, model, policy, train_batch)
-        policy.moa_loss = moa_loss.total_loss
+    # if policy.model.causal:
+    #     moa_loss = setup_moa_loss(logits, model, policy, train_batch)
+    #     policy.moa_loss = moa_loss.total_loss
 
     if state:
         max_seq_len = tf.reduce_max(train_batch["seq_lens"])
@@ -49,7 +56,6 @@ def loss_with_moa(policy, model, dist_class, train_batch):
     else:
         mask = tf.ones_like(
             train_batch[Postprocessing.ADVANTAGES], dtype=tf.bool)
-
     policy.loss_obj = PPOLoss(
         policy.action_space,
         dist_class,
@@ -59,7 +65,7 @@ def loss_with_moa(policy, model, dist_class, train_batch):
         train_batch[SampleBatch.ACTIONS],
         train_batch[BEHAVIOUR_LOGITS],
         train_batch[ACTION_LOGP],
-        train_batch[SampleBatch.VF_PREDS],
+        train_batch['VF_PREDS_{}'.format(0)],
         action_dist,
         model.value_function(),
         policy.kl_coeff,
@@ -70,6 +76,28 @@ def loss_with_moa(policy, model, dist_class, train_batch):
         vf_loss_coeff=policy.config["vf_loss_coeff"],
         use_gae=policy.config["use_gae"],
         model_config=policy.config["model"])
+    for i in range(1, 3):
+        policy.loss_obj.loss += PPOLoss(
+            policy.action_space,
+            dist_class,
+            model,
+            train_batch[Postprocessing.VALUE_TARGETS],
+            train_batch[Postprocessing.ADVANTAGES],
+            train_batch[SampleBatch.ACTIONS],
+            train_batch[BEHAVIOUR_LOGITS],
+            train_batch[ACTION_LOGP],
+            train_batch['VF_PREDS_{}'.format(i)],
+            action_dist,
+            model.value_function(),
+            policy.kl_coeff,
+            mask,
+            entropy_coeff=policy.entropy_coeff,
+            clip_param=policy.config["clip_param"],
+            vf_clip_param=policy.config["vf_clip_param"],
+            vf_loss_coeff=policy.config["vf_loss_coeff"],
+            use_gae=policy.config["use_gae"],
+            model_config=policy.config["model"]).mean_vf_loss
+
     # if policy.model.causal:
     #     policy.loss_obj.loss += moa_loss.total_loss
     return policy.loss_obj.loss
@@ -77,7 +105,7 @@ def loss_with_moa(policy, model, dist_class, train_batch):
 
 def extra_fetches(policy):
     """Adds value function, logits, moa predictions of counterfactual actions to experience train_batches."""
-    ppo_fetches = vf_preds_and_logits_fetches(policy)
+    ppo_fetches = my_vf_preds_and_logits_fetches(policy)
     # if policy.model.causal:
     #     ppo_fetches.update(causal_fetches(policy))
     return ppo_fetches
@@ -98,6 +126,30 @@ def postprocess_ppo_causal(policy,
                         other_agent_batches=None,
                         episode=None):
     """Adds the policy logits, VF preds, and advantages to the trajectory."""
+    print(dir(policy))
+    mygg = policy.compute_actions(np.array([policy.model.obs_space.sample()]))
+    print(mygg)
+    if episode is not None:
+      builder = episode.new_batch_builder()
+      rollout_id = random.randint(0, 10000)
+      builder.add_values(
+          agent_id="extra_0",
+          policy_id="1",  # use p1 so we can easily check it
+          t=0,
+          eps_id=rollout_id,  # new id for each rollout
+          obs=policy.model.obs_space.sample(),
+          actions=0,
+          rewards=0,
+          dones=True,
+          infos={},
+          new_obs=policy.model.obs_space.sample())
+      batch = builder.build_and_reset(episode=None)
+
+      print(batch)
+      print("\n sample \n", sample_batch)
+      print("\n my \n ", batch)
+
+    # episodes[0].add_extra_batch(batch)
     # global saved_batch_item
     # global random_batch_item
     # if policy.model.causal:
@@ -202,7 +254,7 @@ MyPPOPolicy = build_tf_policy(
     before_loss_init=setup_mixins,
     mixins=[
         LearningRateSchedule, EntropyCoeffSchedule, KLCoeffMixin,
-        ValueNetworkMixin]
+        ValueNetworkMixin])
     # ] + get_causal_mixins())
 
 MyPPOTrainer = build_trainer(

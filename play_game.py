@@ -154,12 +154,6 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
                        "train_batch_size": 32,
                        "sgd_minibatch_size": 32,
                        "vf_loss_coeff": 1e-4,
-                       "sample_batch_size":32
-
-                       config.update({"num_sgd_iter": 50,
-                       "train_batch_size": 32,
-                       "sgd_minibatch_size": 32,
-                       "vf_loss_coeff": 1e-4,
                        "sample_batch_size":32,
                        "use_gae": False,
                        "batch_mode": "complete_episodes",

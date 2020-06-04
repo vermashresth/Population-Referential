@@ -44,7 +44,7 @@ class MyModel(TFModelV2):
             i += 1
 
         value_out = tf.keras.layers.Dense(
-            1,
+            3,
             name="value_out",
             activation=None,
             kernel_initializer=normc_initializer(0.01))(last_layer)
@@ -55,5 +55,11 @@ class MyModel(TFModelV2):
         model_out, self._value_out = self.base_model(input_dict["obs"])
         return model_out, state
 
-    def value_function(self):
-        return tf.reshape(self._value_out, [-1])
+    def value_function(self, i=-1):
+
+        all_vals = tf.reshape(self._value_out, [-1])
+        s0, s1, s2 = tf.split(all_vals, num_or_size_splits=3, axis=-1)
+        if i==-1:
+            return tf.math.reduce_mean(all_vals, axis=-1, keepdims=False, name=None)
+        else:
+            return [s0,s1,s2][i]
