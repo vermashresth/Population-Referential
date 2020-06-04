@@ -8,6 +8,7 @@ from ray.tune.registry import register_env
 
 from ref_game import RFGame
 from models import MyModel
+from my_policy import MyPPOTrainer
 
 # from logging import on_episode_start, on_episode_end, on_episode_step,
 
@@ -209,7 +210,7 @@ if __name__=='__main__':
     config['env'] = env_name
     exp_dict = {
             'name': exp_name,
-            'run_or_experiment': alg_run,
+            'run_or_experiment': MyPPOTrainer,
             "stop": {
                 "training_iteration":  args.training_iterations
             },
