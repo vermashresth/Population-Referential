@@ -54,7 +54,7 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
 
     n_pairs = 2
     n_agents = 2*n_pairs
-    n_features = 3
+    n_features = 5
     n_clusters = 5
     n_samples = 3
     n_vocab = 5
@@ -153,11 +153,11 @@ def setup(env, hparams, algorithm, train_batch_size, num_cpus, num_gpus,
         config.update({"num_sgd_iter": 50,
                        "train_batch_size": 32,
                        "sgd_minibatch_size": 32,
-                       "vf_loss_coeff": 1e-4,
+                       "vf_loss_coeff": 1e-1,
                        "sample_batch_size":32,
-                       "use_gae": False,
-                       "batch_mode": "complete_episodes",
-                       "clip_param": 0.2,
+                      #  "use_gae": False,
+                      #  "batch_mode": "complete_episodes",
+                      #  "clip_param": 0.2,
                        })
     elif args.algorithm == "A3C":
         config.update({"sample_batch_size": 50,

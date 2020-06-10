@@ -79,10 +79,10 @@ class RFGame(MultiAgentEnv):
                 id = str(i)
                 if i<self.n_pairs:
                     identify = int(actions[str(self.sp2lt[i])] == self.target[i])
-                    obs[id], rew[id], done[id], info[id] = self.speaker_input[i], identify, True, {}
+                    obs[id], rew[id], done[id], info[id] = self.speaker_input[i], identify, True, {'true_rew':identify}
                 else:
                     identify = int(actions[str(i)] == self.target[self.lt2sp[i]])
-                    obs[id], rew[id], done[id], info[id] = self.listener_input[self.lt2sp[i]], identify, True, {}
+                    obs[id], rew[id], done[id], info[id] = self.listener_input[self.lt2sp[i]], identify, True, {'true_rew':identify}
             done["__all__"] = True
         else:
             for i in range(self.n_agents):

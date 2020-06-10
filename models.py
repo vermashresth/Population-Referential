@@ -1,10 +1,12 @@
-from ray.rllib.utils import try_import_tf
+from ray.rllib.utils import try_import_tf, try_import_tfp
 
 from ray.rllib.models.tf.misc import normc_initializer
 from ray.rllib.models.tf.tf_modelv2 import TFModelV2
 
 tf = try_import_tf()
+tfp = try_import_tfp()
 
+import numpy as np
 class MyModel(TFModelV2):
     """Custom model for policy gradient algorithms."""
 
@@ -60,6 +62,19 @@ class MyModel(TFModelV2):
         all_vals = tf.reshape(self._value_out, [-1])
         s0, s1, s2 = tf.split(all_vals, num_or_size_splits=3, axis=-1)
         if i==-1:
-            return tf.math.reduce_mean(all_vals, axis=-1, keepdims=False, name=None)
+            a= tf.math.reduce_mean(all_vals, axis=-1, keepdims=False, name=None)
+
+            if len(a.shape)==0:
+              return s0
+            return a
         else:
             return [s0,s1,s2][i]
+
+    def uncertainity(self):
+        all_vals = tf.reshape(self._value_out, [-1])
+        cov = tfp.stats.covariance(all_vals,all_vals, sample_axis=0, event_axis=None)
+        print(cov, cov.shape, len(cov.shape))
+
+        if len(cov.shape)==0:
+          return self._value_out
+        return cov

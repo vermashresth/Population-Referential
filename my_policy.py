@@ -16,17 +16,18 @@ from ray.rllib.models import ModelCatalog
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.tf_policy import LearningRateSchedule, \
     EntropyCoeffSchedule, ACTION_LOGP
-from ray.rllib.utils import try_import_tf
+from ray.rllib.utils import try_import_tf, try_import_tfp
 from ray.rllib.policy.tf_policy_template import build_tf_policy
 from ray.rllib.agents.trainer_template import build_trainer
 
 # from algorithms.common_funcs import setup_moa_loss, causal_fetches, setup_causal_mixins, get_causal_mixins, \
 #     causal_postprocess_trajectory, CAUSAL_CONFIG
 import random
-
+from scipy.special import softmax
 NUM_AGENTS = 4
 
 tf = try_import_tf()
+tfp = try_import_tfp()
 
 POLICY_SCOPE = "func"
 
@@ -39,6 +40,9 @@ def my_vf_preds_and_logits_fetches(policy):
         'VF_PREDS_1': policy.model.value_function(1),
         'VF_PREDS_2': policy.model.value_function(2),
         BEHAVIOUR_LOGITS: policy.model.last_output(),
+        'UNCERTAINITY': policy.model.uncertainity(),
+        'VF_EST': policy.model.value_function(-1),
+        'vf_preds': policy.model.value_function(-1)
     }
 def loss_with_moa(policy, model, dist_class, train_batch):
     # you need to override this bit to pull out the right bits from train_batch
@@ -126,28 +130,102 @@ def postprocess_ppo_causal(policy,
                         other_agent_batches=None,
                         episode=None):
     """Adds the policy logits, VF preds, and advantages to the trajectory."""
-    print(dir(policy))
-    mygg = policy.compute_actions(np.array([policy.model.obs_space.sample()]))
-    print(mygg)
-    if episode is not None:
-      builder = episode.new_batch_builder()
-      rollout_id = random.randint(0, 10000)
-      builder.add_values(
-          agent_id="extra_0",
-          policy_id="1",  # use p1 so we can easily check it
-          t=0,
-          eps_id=rollout_id,  # new id for each rollout
-          obs=policy.model.obs_space.sample(),
-          actions=0,
-          rewards=0,
-          dones=True,
-          infos={},
-          new_obs=policy.model.obs_space.sample())
-      batch = builder.build_and_reset(episode=None)
 
-      print(batch)
-      print("\n sample \n", sample_batch)
-      print("\n my \n ", batch)
+    '''
+    episode mein sathiyon ki uncertainities ko dekho, unke uncertain walon pe predict karo,
+    aur agar meri uncertainity kam hai aur prediction mein v estiate high hai to
+    ko naya batch bana ke saathi ke episode mein daal do
+    '''
+    # mygg = policy.compute_actions(np.array([policy.model.obs_space.sample()]))
+    # var = float(np.cov([mygg['VF_PREDS_0'], mygg['VF_PREDS_1'], mygg['VF_PREDS_2']])[0])
+
+
+    if episode is not None:
+      if '1' in other_agent_batches and '0' not in other_agent_batches:
+        other_batch = other_agent_batches['1'][1]
+        # print(other_agent_batches['1'])
+        # print(other_batch)
+        unc = np.cov([other_batch['VF_PREDS_0'][0], other_batch['VF_PREDS_1'][0], other_batch['VF_PREDS_2'][0]])
+        # if i['UNCERTAINITY']>0.3:
+
+        # print('advicee est')
+        # if float(unc)>0.3:
+        myggg = policy.compute_actions(other_batch['obs'], full_fetch=True)
+        # print('other: ', other_agent_batches['1'] )
+        # print('me: ', myggg)
+        # print(policy.compute_single_action(other_batch['obs'][0], []))
+        mygg = myggg[2]
+        # print('myest', mygg)
+        my_unc = float(np.cov([mygg['VF_PREDS_0'][0], mygg['VF_PREDS_1'][0], mygg['VF_PREDS_2'][0]]))
+        p = np.random.random()*100
+        if p<1:
+          print('advicor unc', unc)
+          print('advicor est', other_batch['VF_EST'][0])
+          print('my unc', my_unc)
+          print('MY est', mygg['VF_EST'][0])
+          # print('vfs', mygg['VF_PREDS_0'][0], mygg['VF_PREDS_1'][0])
+          print(mygg)
+          print()
+
+        #   print(i)
+        #   print(dir(i))
+
+
+        # builder = episode.new_batch_builder()
+        # rollout_id = random.randint(0, 10000)
+        # builder.add_values(
+        #     agent_id="extra_0",
+        #     policy_id="1",  # use p1 so we can easily check it
+        #     t=0,
+        #     eps_id=rollout_id,  # new id for each rollout
+        #     obs=other_batch['obs'][0],
+        #     actions=myggg[0],
+        #     rewards=mygg['VF_EST'][0],
+        #     dones=True,
+        #     infos={},
+        #     new_obs=other_batch['obs'][0],
+        #     prev_actions=np.array([0]),
+        #     prev_rewards=np.array([0]))
+        # more = ['VF_EST', 'VF_PREDS_0', 'VF_PREDS_1', 'VF_PREDS_2', 'UNCERTAINITY']
+
+        # batch = builder.build_and_reset(episode=None)
+        # print('ma batch funcs', dir(batch))
+        # new_b = batch['1']
+        rew = sample_batch['rewards']
+        my_probs = softmax(mygg['behaviour_logits'])[0]
+        # print(my_probs)
+        act = other_batch['actions'][0]
+        my_act_prob = my_probs[act]
+        my_act_log_prob = np.log(my_act_prob)
+        if unc<my_unc and other_batch['rewards'][0]>0.8:
+          more = {'t':np.array([0]), 'eps_id':np.array([random.randint(0,10000000)]), 'agent_index': np.array([0]), 'unroll_id':np.array([0]),
+                  'obs':other_batch['obs'],
+                  'actions':other_batch['actions'], 'rewards':other_batch['rewards'],
+                  'prev_actions':np.array([0]),
+                  "prev_rewards":np.array([0]),
+                  'dones':np.array([True]),
+                  'infos':np.array([{}]),
+                  'new_obs':other_batch['obs'],
+                  'action_prob':np.array([my_act_prob]),
+                  'action_logp': np.array([my_act_log_prob])}
+          others = ['action_logp', 'action_prob']
+          for i in sample_batch:
+              if i in mygg and i not in others:
+                sample_batch[i] = np.concatenate([sample_batch[i], other_batch[i]], 0)
+              else:
+                # print(i)
+                sample_batch[i] = np.concatenate([sample_batch[i], more[i]], 0)
+          print("I just got adviced")
+        # sample_batch['infos'][0]['true_rew'] = sample_batch['rewards'][0]
+        # sample_batch['infos'][1]['true_rew'] = -1
+
+
+        # p = np.random.random()*100
+        if p <1:
+          # print("new_b", new_b)
+          # print(batch)
+          print("\n sample \n", sample_batch)
+          # print("\n my \n ", batch)
 
     # episodes[0].add_extra_batch(batch)
     # global saved_batch_item
@@ -214,6 +292,11 @@ def postprocess_ppo_causal(policy,
     #
     #
 
+        # batch = postprocess_ppo_gae(policy, new_b)
+        # return batch
+    # print(sample_batch)
+    # if 'true_rewards' not in sample_batch:
+    #   sample_batch[2]['infos'][0]['true_rew'] = sample_batch['rewards'][0]
     batch = postprocess_ppo_gae(policy, sample_batch)
     return batch
 
